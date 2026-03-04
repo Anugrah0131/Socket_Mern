@@ -15,7 +15,7 @@ function App() {
   const streamRef = useRef(null);
 
   useEffect(() => {
-    socket = io("https://socket-mern-1.onrender.com");
+    socket = io("http://localhost:3000");
 
     async function init() {
       // ✅ Get media first
