@@ -182,7 +182,7 @@ function App() {
     };
   }, []);
 
-  remoteVideoRef.current.style.opacity = 0;
+ 
   // Fade in remote video when it starts playing
   function resetState() {
     // Only close peer connection
@@ -192,9 +192,13 @@ function App() {
     }
 
     // Clear remote video only
+  peerConnectionRef.current.ontrack = (event) => {
     if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
+      remoteVideoRef.current.srcObject = event.streams[0];
+      remoteVideoRef.current.style.opacity = 1;
     }
+  };
+   
 
     setStatus("idle");
     setRoomId("");
