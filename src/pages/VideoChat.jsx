@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from "react";
 import { getSocket } from "../hooks/useSocket";
 import useWebRTC from "../hooks/useWebRTC";
-
+import ControlBar from "../components/ControlBar";
 import VideoSection from "../components/VideoSection";
 import ChatPanel from "../components/ChatPanel";
 
@@ -66,6 +65,22 @@ export default function VideoChat() {
 
   }
 
+  function flushCandidateQueue() {
+
+    if (!peerConnectionRef.current) return;
+
+    while (candidateQueue.current.length > 0) {
+
+      const candidate = candidateQueue.current.shift();
+
+      peerConnectionRef.current
+        .addIceCandidate(candidate)
+        .catch(err => console.error("ICE candidate error:", err));
+
+    }
+
+  }
+
   // ---------------------------
   // Socket Event Handlers
   // ---------------------------
@@ -101,13 +116,7 @@ export default function VideoChat() {
       new RTCSessionDescription(data.offer)
     );
 
-    while (candidateQueue.current.length) {
-
-      const candidate = candidateQueue.current.shift();
-
-      await peerConnectionRef.current.addIceCandidate(candidate);
-
-    }
+    flushCandidateQueue();
 
     const answer = await peerConnectionRef.current.createAnswer();
 
@@ -128,13 +137,7 @@ export default function VideoChat() {
       new RTCSessionDescription(data.answer)
     );
 
-    while (candidateQueue.current.length) {
-
-      const candidate = candidateQueue.current.shift();
-
-      await peerConnectionRef.current.addIceCandidate(candidate);
-
-    }
+    flushCandidateQueue();
 
   };
 
@@ -146,13 +149,19 @@ export default function VideoChat() {
 
     if (peerConnectionRef.current.remoteDescription) {
 
-      await peerConnectionRef.current.addIceCandidate(candidate);
+      try {
+        await peerConnectionRef.current.addIceCandidate(candidate);
+      } catch (err) {
+        console.error("Error adding ICE candidate:", err);
+      }
 
     } else {
 
       candidateQueue.current.push(candidate);
 
     }
+
+    
 
   };
 
@@ -226,6 +235,8 @@ export default function VideoChat() {
 
     if (status !== "idle") return;
 
+    initMedia(); // restart camera 
+
     setStatus("waiting");
 
     socket.emit("find_match");
@@ -253,15 +264,71 @@ export default function VideoChat() {
 
   }
 
+  function stopChat() {
+
+    // leave socket room
+    if (roomId) {
+      socket.emit("leave_room", { roomId });
+    }
+
+    // close peer connection
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    // clear remote video
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+
+    // stop local media tracks
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    // reset UI
+    setStatus("idle");
+    setRoomId("");
+    setMessages([]);
+    setMessage("");
+
+  }
+
   // ---------------------------
   // UI
   // ---------------------------
 
+  const [micEnabled, setMicEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(true);
+
+  function toggleMic() {
+    const stream = localVideoRef.current?.srcObject;
+    if (!stream) return;
+
+    stream.getAudioTracks().forEach(track => {
+      track.enabled = !track.enabled;
+    });
+
+    setMicEnabled(prev => !prev);
+  }
+
+  function toggleCamera() {
+    const stream = localVideoRef.current?.srcObject;
+    if (!stream) return;
+
+    stream.getVideoTracks().forEach(track => {
+      track.enabled = !track.enabled;
+    });
+
+    setCameraEnabled(prev => !prev);
+  }
   return (
 
     <div className="app">
 
-      <h1 className="title">Random Video Chat</h1>
+      <h1 className="title">Video Chat</h1>
 
       <VideoSection
         localVideoRef={localVideoRef}
@@ -279,6 +346,15 @@ export default function VideoChat() {
         </button>
 
       )}
+
+      <ControlBar
+        status={status}
+        findMatch={findMatch}
+        skipChat={skipChat}
+        stopChat={stopChat}
+        toggleMic={toggleMic}
+        toggleCamera={toggleCamera}
+      />
 
       {status === "chatting" && (
 

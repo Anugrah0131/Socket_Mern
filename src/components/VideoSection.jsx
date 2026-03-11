@@ -1,32 +1,55 @@
 import React from "react";
-import SearchOverlay from "./SearchOverlay";
 
-export default function VideoSection({
-  localVideoRef,
-  remoteVideoRef,
-  status
-}) {
+export default function VideoSection({ localVideoRef, remoteVideoRef, status }) {
 
   return (
 
-    <div className="video-wrapper">
+    <div className="video-grid">
 
-      <video
-        ref={remoteVideoRef}
-        autoPlay
-        playsInline
-        className="remote-video"
-      />
+      {/* Partner video */}
+      <div className="video-card partner">
 
-      <video
-        ref={localVideoRef}
-        autoPlay
-        muted
-        playsInline
-        className="local-video"
-      />
+        <div className="user-tag">
+          👤 Stranger
+        </div>
 
-      {status === "waiting" && <SearchOverlay />}
+        {status === "chatting" && (
+          <div className="status-indicator">
+            ● Connected
+          </div>
+        )}
+
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+        />
+
+        {(status === "waiting" || status === "idle") && (
+          <div className="search-overlay">
+            <div className="loader"></div>
+            <p>Finding someone online...</p>
+          </div>
+        )}
+
+      </div>
+
+
+      {/* Your camera */}
+      <div className="video-card self">
+
+        <div className="user-tag">
+          👋 You
+        </div>
+
+        <video
+          ref={localVideoRef}
+          autoPlay
+          muted
+          playsInline
+        />
+
+      </div>
 
     </div>
 
