@@ -4,16 +4,42 @@ import handleAnswer from "../handlers/answerHandler.js";
 import handleIce from "../handlers/iceHandler.js";
 import handleMessage from "../handlers/messageHandler.js";
 import handleSkip from "../handlers/skipHandler.js";
+import { v4 as uuidv4 } from "uuid";
+import { generateUsername } from "../utils/generateUsername.js";
+import { generateAvatar } from "../utils/generateAvatar.js";
+import { cleanupRoom } from "../utils/cleanupRoom.js";
 
-let waitingUser = null;
+let waitingQueue = [];
 
 export default function socketHandler(io) {
+
   io.on("connection", (socket) => {
 
     console.log("🟢 User connected:", socket.id);
 
+    // Create user identity
+    const id = uuidv4();
+    const username = generateUsername();
+    const avatar = generateAvatar(id);
+
+
+    // Send profile to frontend
+socket.user = {
+  id,
+  username,
+  avatar,
+    country: "unknown",
+  friends: [],
+  blocked: []
+};
+
+console.log("User connected:", socket.user)
+
+// send profile immediately
+socket.emit("user_profile", socket.user);
+
     socket.on("find_match", () => {
-      waitingUser = handleMatch(io, socket, waitingUser);
+      handleMatch(io, socket, waitingQueue);
     });
 
     socket.on("create_offer", (data) => {
@@ -33,22 +59,22 @@ export default function socketHandler(io) {
     });
 
     socket.on("skip", () => {
-      handleSkip(socket);
+      handleSkip(io, socket);
     });
 
     socket.on("disconnect", () => {
 
       console.log("🔴 Disconnected:", socket.id);
 
-      if (waitingUser?.id === socket.id) {
-        waitingUser = null;
-      }
+      // Remove from waiting queue if present
+      waitingQueue = waitingQueue.filter((s) => s.id !== socket.id);
 
       if (socket.roomId) {
-        socket.to(socket.roomId).emit("partner_left");
+        cleanupRoom(io, socket.roomId);
       }
 
     });
 
   });
+
 }

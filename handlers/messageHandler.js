@@ -1,6 +1,6 @@
 export default function handleMessage(io, socket, { roomId, message }) {
 
-  if (!roomId) return;
+  if (!roomId || socket.roomId !== roomId) return;
 
   io.to(roomId).emit("receive_message", {
     sender: socket.id,

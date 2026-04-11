@@ -1,32 +1,44 @@
-export default function handleMatch(io, socket, waitingUser) {
+import { cleanupRoom } from "../utils/cleanupRoom.js";
+
+export default function handleMatch(io, socket, waitingQueue) {
 
   console.log("🔎 Match request from:", socket.id);
 
-  if (waitingUser && waitingUser.id !== socket.id) {
+  // Prevent duplicate entries
+  if (waitingQueue.some(s => s.id === socket.id)) {
+    return;
+  }
 
-    const roomId = `${waitingUser.id}#${socket.id}`;
+  // If already in a room, securely clean up both peers to avoid ghost connections
+  if (socket.roomId) {
+    cleanupRoom(io, socket.roomId);
+  }
 
-    socket.join(roomId);
-    waitingUser.join(roomId);
+  console.log("⏳ Waiting for partner:", socket.id);
+  waitingQueue.push(socket);
 
-    socket.roomId = roomId;
-    waitingUser.roomId = roomId;
+  if (waitingQueue.length >= 2) {
+    const user1 = waitingQueue.shift();
+    const user2 = waitingQueue.shift();
+
+    const roomId = `${user1.id}#${user2.id}`;
+
+    user1.join(roomId);
+    user2.join(roomId);
+
+    user1.roomId = roomId;
+    user2.roomId = roomId;
 
     console.log("✅ Match found:", roomId);
 
-    io.to(waitingUser.id).emit("match_found", {
+    io.to(user1.id).emit("match_found", {
       roomId,
       initiator: true,
     });
 
-    io.to(socket.id).emit("match_found", {
+    io.to(user2.id).emit("match_found", {
       roomId,
       initiator: false,
     });
-
-    return null;
   }
-
-  console.log("⏳ Waiting for partner:", socket.id);
-  return socket;
 }

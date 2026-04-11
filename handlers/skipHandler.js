@@ -1,16 +1,11 @@
-export default function handleSkip(socket) {
+import { cleanupRoom } from "../utils/cleanupRoom.js";
 
+export default function handleSkip(io, socket) {
   console.log("⏭ Skip by:", socket.id);
 
   if (socket.roomId) {
-
-    socket.to(socket.roomId).emit("partner_left");
-
-    socket.leave(socket.roomId);
-    socket.roomId = null;
-
+    cleanupRoom(io, socket.roomId);
   }
 
   socket.emit("reset_chat");
-
 }
