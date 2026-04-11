@@ -1,6 +1,21 @@
-import React from "react";
+import React, { useEffect } from "react";
 
-export default function VideoSection({ localVideoRef, remoteVideoRef, status }) {
+export default function VideoSection({
+  localVideoRef,
+  remoteVideoRef,
+  status,
+  user
+}) {
+
+  console.log("VIDEO SECTION USER:", user);
+
+  useEffect(() => {
+    if (remoteVideoRef?.current) {
+      remoteVideoRef.current.onloadedmetadata = () => {
+        remoteVideoRef.current.play().catch(() => {});
+      };
+    }
+  }, [remoteVideoRef]);
 
   return (
 
@@ -34,12 +49,11 @@ export default function VideoSection({ localVideoRef, remoteVideoRef, status }) 
 
       </div>
 
-
       {/* Your camera */}
       <div className="video-card self">
 
         <div className="user-tag">
-          👋 You
+          👋 {user?.username || "You"}
         </div>
 
         <video

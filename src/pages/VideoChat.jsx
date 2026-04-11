@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { getSocket } from "../hooks/useSocket";
 import useWebRTC from "../hooks/useWebRTC";
 import ControlBar from "../components/ControlBar";
@@ -13,24 +13,30 @@ export default function VideoChat() {
   const [roomId, setRoomId] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const [user, setUser] = useState(null);
+
+  // ✅ define first (IMPORTANT)
+  const reconnectToNewPartner = useCallback(() => {
+
+    resetState();
+    createPeerConnection();
+    setStatus("waiting");
+    socket.emit("find_match");
+
+  }, []);
 
   const {
     localVideoRef,
     remoteVideoRef,
     peerConnectionRef,
     streamRef,
-    candidateQueue,
     createPeerConnection,
-    initMedia
+    initMedia,
+    addIceCandidate,
+    flushCandidateQueue
   } = useWebRTC(socket, reconnectToNewPartner);
 
-  // ---------------------------
-  // Reset App State
-  // ---------------------------
-
   function resetState() {
-
-    candidateQueue.current = [];
 
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -49,58 +55,19 @@ export default function VideoChat() {
 
   }
 
-  // ---------------------------
-  // Reconnect Logic
-  // ---------------------------
-
-  function reconnectToNewPartner() {
-
-    resetState();
-
-    createPeerConnection();
-
-    setStatus("waiting");
-
-    socket.emit("find_match");
-
-  }
-
-  function flushCandidateQueue() {
-
-    if (!peerConnectionRef.current) return;
-
-    while (candidateQueue.current.length > 0) {
-
-      const candidate = candidateQueue.current.shift();
-
-      peerConnectionRef.current
-        .addIceCandidate(candidate)
-        .catch(err => console.error("ICE candidate error:", err));
-
-    }
-
-  }
-
-  // ---------------------------
-  // Socket Event Handlers
-  // ---------------------------
-
   const handleMatchFound = async ({ roomId, initiator }) => {
 
     socket.roomId = roomId;
-
     setRoomId(roomId);
-
     setStatus("chatting");
 
     if (initiator && peerConnectionRef.current) {
 
       const offer = await peerConnectionRef.current.createOffer();
-
       await peerConnectionRef.current.setLocalDescription(offer);
 
       socket.emit("create_offer", {
-        roomId: socket.roomId,
+        roomId,
         offer
       });
 
@@ -116,10 +83,9 @@ export default function VideoChat() {
       new RTCSessionDescription(data.offer)
     );
 
-    flushCandidateQueue();
+    await flushCandidateQueue();
 
     const answer = await peerConnectionRef.current.createAnswer();
-
     await peerConnectionRef.current.setLocalDescription(answer);
 
     socket.emit("create_answer", {
@@ -137,71 +103,27 @@ export default function VideoChat() {
       new RTCSessionDescription(data.answer)
     );
 
-    flushCandidateQueue();
+    await flushCandidateQueue();
 
   };
 
   const handleIceCandidate = async (data) => {
 
-    if (!peerConnectionRef.current) return;
-
     const candidate = new RTCIceCandidate(data.candidate);
-
-    if (peerConnectionRef.current.remoteDescription) {
-
-      try {
-        await peerConnectionRef.current.addIceCandidate(candidate);
-      } catch (err) {
-        console.error("Error adding ICE candidate:", err);
-      }
-
-    } else {
-
-      candidateQueue.current.push(candidate);
-
-    }
-
-    
+    await addIceCandidate(candidate);
 
   };
 
   const handleMessage = (data) => {
-
     setMessages((prev) => [...prev, data]);
-
   };
 
-  const handlePartnerLeft = () => {
-
-    resetState();
-
-    createPeerConnection();
-
-    setStatus("waiting");
-
-    socket.emit("find_match");
-
-  };
-
-  const handleResetChat = () => {
-
-    resetState();
-
-    createPeerConnection();
-
-    setStatus("waiting");
-
-    socket.emit("find_match");
-
-  };
-
-  // ---------------------------
-  // useEffect
-  // ---------------------------
+  const handlePartnerLeft = () => reconnectToNewPartner();
+  const handleResetChat = () => reconnectToNewPartner();
 
   useEffect(() => {
 
-    initMedia();
+    initMedia(); // ✅ ONLY ONCE HERE
 
     socket.on("match_found", handleMatchFound);
     socket.on("offer_created", handleOffer);
@@ -211,7 +133,10 @@ export default function VideoChat() {
     socket.on("partner_left", handlePartnerLeft);
     socket.on("reset_chat", handleResetChat);
 
-    // cleanup listeners
+    socket.on("user_profile", (data) => {
+      console.log("PROFILE RECEIVED:", data);
+      setUser(data);
+    });
 
     return () => {
 
@@ -222,23 +147,17 @@ export default function VideoChat() {
       socket.off("receive_message", handleMessage);
       socket.off("partner_left", handlePartnerLeft);
       socket.off("reset_chat", handleResetChat);
+      socket.off("user_profile");
 
     };
 
   }, []);
 
-  // ---------------------------
-  // UI Actions
-  // ---------------------------
-
   function findMatch() {
 
     if (status !== "idle") return;
 
-    initMedia(); // restart camera 
-
     setStatus("waiting");
-
     socket.emit("find_match");
 
   }
@@ -247,11 +166,7 @@ export default function VideoChat() {
 
     if (!roomId || !message.trim()) return;
 
-    socket.emit("send_message", {
-      roomId,
-      message
-    });
-
+    socket.emit("send_message", { roomId, message });
     setMessage("");
 
   }
@@ -259,36 +174,30 @@ export default function VideoChat() {
   function skipChat() {
 
     if (!roomId) return;
-
     socket.emit("skip");
 
   }
 
   function stopChat() {
 
-    // leave socket room
     if (roomId) {
       socket.emit("leave_room", { roomId });
     }
 
-    // close peer connection
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
 
-    // clear remote video
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
     }
 
-    // stop local media tracks
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
 
-    // reset UI
     setStatus("idle");
     setRoomId("");
     setMessages([]);
@@ -296,14 +205,11 @@ export default function VideoChat() {
 
   }
 
-  // ---------------------------
-  // UI
-  // ---------------------------
-
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(true);
 
   function toggleMic() {
+
     const stream = localVideoRef.current?.srcObject;
     if (!stream) return;
 
@@ -312,9 +218,11 @@ export default function VideoChat() {
     });
 
     setMicEnabled(prev => !prev);
+
   }
 
   function toggleCamera() {
+
     const stream = localVideoRef.current?.srcObject;
     if (!stream) return;
 
@@ -323,28 +231,28 @@ export default function VideoChat() {
     });
 
     setCameraEnabled(prev => !prev);
+
   }
+
   return (
 
     <div className="app">
 
-      <h1 className="title">Video Chat</h1>
+      <h1 className="title">
+        Video Chat {user && `— ${user.username}`}
+      </h1>
 
       <VideoSection
         localVideoRef={localVideoRef}
         remoteVideoRef={remoteVideoRef}
         status={status}
+        user={user}
       />
 
       {status === "idle" && (
-
-        <button
-          className="main-btn"
-          onClick={findMatch}
-        >
+        <button className="main-btn" onClick={findMatch}>
           Start Chat
         </button>
-
       )}
 
       <ControlBar
@@ -357,7 +265,6 @@ export default function VideoChat() {
       />
 
       {status === "chatting" && (
-
         <ChatPanel
           messages={messages}
           message={message}
@@ -365,7 +272,6 @@ export default function VideoChat() {
           sendMessage={sendMessage}
           skipChat={skipChat}
         />
-
       )}
 
     </div>

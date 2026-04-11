@@ -67,8 +67,10 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
     peerConnectionRef.current.ontrack = (event) => {
 
       if (remoteVideoRef.current) {
+
         remoteVideoRef.current.srcObject = event.streams[0];
         remoteVideoRef.current.style.opacity = 1;
+
       }
 
     };
@@ -89,6 +91,45 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
     }
 
     createPeerConnection();
+
+  }
+
+  async function addIceCandidate(candidate) {
+
+    if (!peerConnectionRef.current) return;
+
+    try {
+
+      if (peerConnectionRef.current.remoteDescription) {
+
+        await peerConnectionRef.current.addIceCandidate(candidate);
+
+      } else {
+
+        candidateQueue.current.push(candidate);
+
+      }
+
+    } catch (err) {
+      console.error("ICE candidate error:", err);
+    }
+
+  }
+
+  async function flushCandidateQueue() {
+
+    for (const candidate of candidateQueue.current) {
+
+      try {
+        await peerConnectionRef.current.addIceCandidate(candidate);
+      } catch (err) {
+        console.error("Queued ICE error:", err);
+      }
+
+    }
+
+    candidateQueue.current = [];
+
   }
 
   return {
@@ -99,5 +140,8 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
     candidateQueue,
     createPeerConnection,
     initMedia,
+    addIceCandidate,
+    flushCandidateQueue
   };
+
 }
