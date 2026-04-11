@@ -33,10 +33,14 @@ export default function VideoChat() {
     createPeerConnection,
     initMedia,
     addIceCandidate,
-    flushCandidateQueue
+    flushCandidateQueue,
+    cleanupAll,
+    mediaError
   } = useWebRTC(socket, reconnectToNewPartner);
 
   function resetState() {
+
+    socket.roomId = null;
 
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -140,6 +144,8 @@ export default function VideoChat() {
 
     return () => {
 
+      cleanupAll();
+
       socket.off("match_found", handleMatchFound);
       socket.off("offer_created", handleOffer);
       socket.off("answer_created", handleAnswer);
@@ -184,24 +190,7 @@ export default function VideoChat() {
       socket.emit("leave_room", { roomId });
     }
 
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-
-    setStatus("idle");
-    setRoomId("");
-    setMessages([]);
-    setMessage("");
+    resetState();
 
   }
 
@@ -242,36 +231,48 @@ export default function VideoChat() {
         Video Chat {user && `— ${user.username}`}
       </h1>
 
-      <VideoSection
-        localVideoRef={localVideoRef}
-        remoteVideoRef={remoteVideoRef}
-        status={status}
-        user={user}
-      />
+      {mediaError ? (
+        <div className="error-card">
+          <h2>⚠️ Required Media Access</h2>
+          <p>{mediaError}</p>
+        </div>
+      ) : (
+        <>
+          <VideoSection
+            localVideoRef={localVideoRef}
+            remoteVideoRef={remoteVideoRef}
+            status={status}
+            user={user}
+            cameraEnabled={cameraEnabled}
+          />
 
-      {status === "idle" && (
-        <button className="main-btn" onClick={findMatch}>
-          Start Chat
-        </button>
-      )}
+          {status === "idle" && (
+            <button className="main-btn" onClick={findMatch}>
+              Start Chat
+            </button>
+          )}
 
-      <ControlBar
-        status={status}
-        findMatch={findMatch}
-        skipChat={skipChat}
-        stopChat={stopChat}
-        toggleMic={toggleMic}
-        toggleCamera={toggleCamera}
-      />
+          <ControlBar
+            status={status}
+            findMatch={findMatch}
+            skipChat={skipChat}
+            stopChat={stopChat}
+            toggleMic={toggleMic}
+            toggleCamera={toggleCamera}
+            micEnabled={micEnabled}
+            cameraEnabled={cameraEnabled}
+          />
 
-      {status === "chatting" && (
-        <ChatPanel
-          messages={messages}
-          message={message}
-          setMessage={setMessage}
-          sendMessage={sendMessage}
-          skipChat={skipChat}
-        />
+          {status === "chatting" && (
+            <ChatPanel
+              messages={messages}
+              message={message}
+              setMessage={setMessage}
+              sendMessage={sendMessage}
+              skipChat={skipChat}
+            />
+          )}
+        </>
       )}
 
     </div>

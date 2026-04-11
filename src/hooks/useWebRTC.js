@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 export default function useWebRTC(socket, reconnectToNewPartner) {
 
@@ -7,6 +7,7 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
   const peerConnectionRef = useRef(null);
   const streamRef = useRef(null);
   const candidateQueue = useRef([]);
+  const [mediaError, setMediaError] = useState(null);
 
   function createPeerConnection() {
 
@@ -70,6 +71,9 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
 
         remoteVideoRef.current.srcObject = event.streams[0];
         remoteVideoRef.current.style.opacity = 1;
+        
+        // Ensure play is explicitly called when track arrives
+        remoteVideoRef.current.play().catch(err => console.error("Remote video play error:", err));
 
       }
 
@@ -79,18 +83,42 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
 
   async function initMedia() {
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true,
-    });
+    try {
 
-    streamRef.current = stream;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 }, 
+          facingMode: "user" 
+        },
+        audio: { 
+          echoCancellation: true, 
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+      });
 
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = stream;
+      streamRef.current = stream;
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+      
+      setMediaError(null);
+      createPeerConnection();
+
+    } catch (err) {
+      
+      console.error("Media access error:", err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setMediaError("Permission Denied: Please allow camera and microphone access to find a match.");
+      } else if (err.name === 'NotFoundError') {
+        setMediaError("Hardware Error: No camera or microphone was found.");
+      } else {
+        setMediaError("Error accessing media devices. Please refresh.");
+      }
+      
     }
-
-    createPeerConnection();
 
   }
 
@@ -132,6 +160,25 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
 
   }
 
+  function stopMediaTracks() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+  }
+
+  function cleanupAll() {
+    stopMediaTracks();
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    candidateQueue.current = [];
+  }
+
   return {
     localVideoRef,
     remoteVideoRef,
@@ -141,7 +188,10 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
     createPeerConnection,
     initMedia,
     addIceCandidate,
-    flushCandidateQueue
+    flushCandidateQueue,
+    stopMediaTracks,
+    cleanupAll,
+    mediaError
   };
 
 }

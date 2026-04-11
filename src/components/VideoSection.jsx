@@ -4,7 +4,8 @@ export default function VideoSection({
   localVideoRef,
   remoteVideoRef,
   status,
-  user
+  user,
+  cameraEnabled
 }) {
 
   console.log("VIDEO SECTION USER:", user);
@@ -43,13 +44,13 @@ export default function VideoSection({
         {(status === "waiting" || status === "idle") && (
           <div className="search-overlay">
             <div className="loader"></div>
-            <p>Finding someone online...</p>
+            <p>Searching for partner...</p>
           </div>
         )}
 
       </div>
 
-      {/* Your camera */}
+      {/* Your camera (PiP) */}
       <div className="video-card self">
 
         <div className="user-tag">
@@ -61,7 +62,15 @@ export default function VideoSection({
           autoPlay
           muted
           playsInline
+          style={{ opacity: cameraEnabled ? 1 : 0 }}
         />
+
+        {!cameraEnabled && (
+          <div className="search-overlay">
+            <h1 style={{fontSize: "3rem", margin: 0}}>🚫</h1>
+            <p>Camera Off</p>
+          </div>
+        )}
 
       </div>
 
