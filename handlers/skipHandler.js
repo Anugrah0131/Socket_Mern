@@ -7,5 +7,5 @@ export default function handleSkip(io, socket) {
     cleanupRoom(io, socket.roomId);
   }
 
-  socket.emit("reset_chat");
+  // Client locally handles reconnect now using partner_left or local state
 }

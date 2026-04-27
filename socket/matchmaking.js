@@ -18,8 +18,22 @@ export default function handleMatch(io, socket, waitingQueue) {
   waitingQueue.push(socket);
 
   if (waitingQueue.length >= 2) {
-    const user1 = waitingQueue.shift();
-    const user2 = waitingQueue.shift();
+    let u1Index = 0;
+    let u2Index = 1;
+
+    if (waitingQueue[u1Index].lastPartner === waitingQueue[u2Index].id) {
+      if (waitingQueue.length > 2) {
+        u2Index = 2; // pick a different partner
+      }
+      // If there are only 2 people on the platform, we allow them to reconnect
+      // rather than freezing the application completely.
+    }
+
+    const user1 = waitingQueue.splice(u1Index, 1)[0];
+    const user2 = waitingQueue.splice(u2Index - 1, 1)[0];
+
+    user1.lastPartner = user2.id;
+    user2.lastPartner = user1.id;
 
     const roomId = `${user1.id}#${user2.id}`;
 

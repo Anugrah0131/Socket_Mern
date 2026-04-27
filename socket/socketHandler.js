@@ -4,10 +4,8 @@ import handleAnswer from "../handlers/answerHandler.js";
 import handleIce from "../handlers/iceHandler.js";
 import handleMessage from "../handlers/messageHandler.js";
 import handleSkip from "../handlers/skipHandler.js";
-import { v4 as uuidv4 } from "uuid";
-import { generateUsername } from "../utils/generateUsername.js";
-import { generateAvatar } from "../utils/generateAvatar.js";
 import { cleanupRoom } from "../utils/cleanupRoom.js";
+import { verifyToken } from "../middleware/authMiddleware.js";
 
 let waitingQueue = [];
 
@@ -15,64 +13,111 @@ export default function socketHandler(io) {
 
   io.on("connection", (socket) => {
 
-    console.log("🟢 User connected:", socket.id);
+    console.log("🟢 New socket connected:", socket.id);
 
-    // Create user identity
-    const id = uuidv4();
-    const username = generateUsername();
-    const avatar = generateAvatar(id);
+    // ✅ AUTH LAYER (CRITICAL)
+    socket.on("user:join", (data) => {
+      try {
+        const { token, userId, username, avatar, isGuest } = data;
 
+        let userData = null;
 
-    // Send profile to frontend
-socket.user = {
-  id,
-  username,
-  avatar,
-    country: "unknown",
-  friends: [],
-  blocked: []
-};
+        if (token) {
+          const decoded = verifyToken(token);
 
-console.log("User connected:", socket.user)
+          if (!decoded) {
+            console.log("❌ Invalid token");
+            return socket.disconnect();
+          }
 
-// send profile immediately
-socket.emit("user_profile", socket.user);
+          userData = {
+            userId: decoded.userId,
+            username,
+            avatar,
+            isGuest: false,
+          };
 
-    socket.on("find_match", () => {
+        } else {
+          userData = {
+            userId,
+            username,
+            avatar,
+            isGuest: true,
+          };
+        }
+
+        socket.user = userData;
+
+        console.log("✅ User joined:", socket.user);
+
+        // send profile AFTER auth
+        socket.emit("user_profile", socket.user);
+
+      } catch (err) {
+        console.error("Auth error:", err);
+        socket.disconnect();
+      }
+    });
+
+    // ⚠️ BLOCK actions until auth is ready
+    const requireAuth = (callback) => {
+      return (...args) => {
+        if (!socket.user) {
+          console.log("⛔ Action blocked: user not authenticated");
+          return;
+        }
+        callback(...args);
+      };
+    };
+
+    // 🎯 MATCHMAKING (UNCHANGED LOGIC, just protected)
+    socket.on("find_match", requireAuth(() => {
       handleMatch(io, socket, waitingQueue);
-    });
+    }));
 
-    socket.on("create_offer", (data) => {
+    socket.on("create_offer", requireAuth((data) => {
       handleOffer(socket, data);
-    });
+    }));
 
-    socket.on("create_answer", (data) => {
+    socket.on("create_answer", requireAuth((data) => {
       handleAnswer(socket, data);
-    });
+    }));
 
-    socket.on("ice_candidate", (data) => {
+    socket.on("ice_candidate", requireAuth((data) => {
       handleIce(socket, data);
-    });
+    }));
 
-    socket.on("send_message", (data) => {
+    socket.on("send_message", requireAuth((data) => {
       handleMessage(io, socket, data);
-    });
+    }));
 
-    socket.on("skip", () => {
+    socket.on("skip", requireAuth(() => {
+      const queueIndex = waitingQueue.findIndex(s => s.id === socket.id);
+      if (queueIndex !== -1) waitingQueue.splice(queueIndex, 1);
+
       handleSkip(io, socket);
-    });
+    }));
 
-    socket.on("disconnect", () => {
-
-      console.log("🔴 Disconnected:", socket.id);
-
-      // Remove from waiting queue if present
-      waitingQueue = waitingQueue.filter((s) => s.id !== socket.id);
+    socket.on("leave_room", requireAuth(() => {
+      const queueIndex = waitingQueue.findIndex(s => s.id === socket.id);
+      if (queueIndex !== -1) waitingQueue.splice(queueIndex, 1);
 
       if (socket.roomId) {
         cleanupRoom(io, socket.roomId);
       }
+    }));
 
+    // 🔴 SINGLE CLEAN DISCONNECT HANDLER
+    socket.on("disconnect", () => {
+      console.log("🔴 Disconnected:", socket.id, socket.user?.userId);
+
+      // remove from queue
+      waitingQueue = waitingQueue.filter((s) => s.id !== socket.id);
+
+      // cleanup room
+      if (socket.roomId) {
+        cleanupRoom(io, socket.roomId);
+      }
     });
 
   });
