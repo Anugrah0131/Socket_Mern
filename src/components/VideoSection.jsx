@@ -15,8 +15,10 @@ export default function VideoSection({
       remoteVideoRef.current.onloadedmetadata = () => {
         remoteVideoRef.current.play().catch(() => {});
       };
+ 
     }
   }, [remoteVideoRef]);
+
 
   return (
 

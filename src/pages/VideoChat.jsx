@@ -1,29 +1,97 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { getSocket } from "../hooks/useSocket";
+import React, { useState, useEffect, useCallback, useRef, useContext } from "react";
+import { connectSocket } from "../hooks/useSocket";
 import useWebRTC from "../hooks/useWebRTC";
 import ControlBar from "../components/ControlBar";
 import VideoSection from "../components/VideoSection";
 import ChatPanel from "../components/ChatPanel";
+import { AuthContext } from "../context/AuthContext";
 
 export default function VideoChat() {
 
-  const socket = getSocket();
+  const { user } = useContext(AuthContext);
+
+ 
+  // ✅ guest creation
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+
+    if (!user && !storedUser) {
+      console.log("👤 Creating guest user...");
+
+      const guestUser = {
+        userId: crypto.randomUUID(),
+        username: "guest_" + Math.floor(Math.random() * 10000),
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${Math.random()}`,
+        isGuest: true,
+        token: null,
+      };
+
+      localStorage.setItem("user", JSON.stringify(guestUser));
+      window.location.reload();
+    }
+  }, [user]);
+
+  const [socket, setSocket] = useState(null);
+  const [socketReady, setSocketReady] = useState(false);
 
   const [status, setStatus] = useState("idle");
   const [roomId, setRoomId] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
-  const [user, setUser] = useState(null);
 
-  // ✅ define first (IMPORTANT)
+  const reconnectTimeout = useRef(null);
+
+  // ✅ CONNECT SOCKET PROPERLY
+  useEffect(() => {
+    if (!user) {
+      console.log("⛔ No user yet");
+      return;
+    }
+
+    console.log("👤 User:", user);
+
+    const s = connectSocket(user);
+    if (!s) return;
+
+    // 🔥 WAIT FOR REAL CONNECTION
+    const handleConnect = () => {
+      console.log("🟢 Socket connected:", s.id);
+      setSocket(s);
+      setSocketReady(true);
+    };
+
+    const handleError = (err) => {
+      console.error("❌ Socket error:", err);
+    };
+
+    s.on("connect", handleConnect);
+    s.on("connect_error", handleError);
+
+    return () => {
+      s.off("connect", handleConnect);
+      s.off("connect_error", handleError);
+    };
+
+  }, [user]);
+
   const reconnectToNewPartner = useCallback(() => {
 
-    resetState();
-    createPeerConnection();
-    setStatus("waiting");
-    socket.emit("find_match");
+    if (!socket) return;
 
-  }, []);
+    if (reconnectTimeout.current) {
+      clearTimeout(reconnectTimeout.current);
+    }
+
+    resetState();
+    setStatus("waiting");
+
+    reconnectTimeout.current = setTimeout(() => {
+      if (socket.roomId) return;
+      socket.emit("find_match");
+      reconnectTimeout.current = null;
+    }, 600);
+
+  }, [socket]);
 
   const {
     localVideoRef,
@@ -40,6 +108,8 @@ export default function VideoChat() {
 
   function resetState() {
 
+    if (!socket) return;
+
     socket.roomId = null;
 
     if (peerConnectionRef.current) {
@@ -48,15 +118,18 @@ export default function VideoChat() {
     }
 
     if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-      remoteVideoRef.current.style.opacity = 0;
+      const video = remoteVideoRef.current;
+      video.pause();
+      video.srcObject = null;
+      video.removeAttribute("src");
+      video.load();
+      video.style.opacity = 0;
     }
 
     setStatus("idle");
     setRoomId("");
     setMessages([]);
     setMessage("");
-
   }
 
   const handleMatchFound = async ({ roomId, initiator }) => {
@@ -65,22 +138,17 @@ export default function VideoChat() {
     setRoomId(roomId);
     setStatus("chatting");
 
-    if (initiator && peerConnectionRef.current) {
+    createPeerConnection();
 
+    if (initiator && peerConnectionRef.current) {
       const offer = await peerConnectionRef.current.createOffer();
       await peerConnectionRef.current.setLocalDescription(offer);
 
-      socket.emit("create_offer", {
-        roomId,
-        offer
-      });
-
+      socket.emit("create_offer", { roomId, offer });
     }
-
   };
 
   const handleOffer = async (data) => {
-
     if (!peerConnectionRef.current) return;
 
     await peerConnectionRef.current.setRemoteDescription(
@@ -96,11 +164,9 @@ export default function VideoChat() {
       roomId: data.roomId,
       answer
     });
-
   };
 
   const handleAnswer = async (data) => {
-
     if (!peerConnectionRef.current) return;
 
     await peerConnectionRef.current.setRemoteDescription(
@@ -108,14 +174,11 @@ export default function VideoChat() {
     );
 
     await flushCandidateQueue();
-
   };
 
   const handleIceCandidate = async (data) => {
-
     const candidate = new RTCIceCandidate(data.candidate);
     await addIceCandidate(candidate);
-
   };
 
   const handleMessage = (data) => {
@@ -126,8 +189,9 @@ export default function VideoChat() {
   const handleResetChat = () => reconnectToNewPartner();
 
   useEffect(() => {
+    if (!socketReady || !socket) return;
 
-    initMedia(); // ✅ ONLY ONCE HERE
+    initMedia();
 
     socket.on("match_found", handleMatchFound);
     socket.on("offer_created", handleOffer);
@@ -137,13 +201,7 @@ export default function VideoChat() {
     socket.on("partner_left", handlePartnerLeft);
     socket.on("reset_chat", handleResetChat);
 
-    socket.on("user_profile", (data) => {
-      console.log("PROFILE RECEIVED:", data);
-      setUser(data);
-    });
-
     return () => {
-
       cleanupAll();
 
       socket.off("match_found", handleMatchFound);
@@ -153,52 +211,40 @@ export default function VideoChat() {
       socket.off("receive_message", handleMessage);
       socket.off("partner_left", handlePartnerLeft);
       socket.off("reset_chat", handleResetChat);
-      socket.off("user_profile");
-
     };
 
-  }, []);
+  }, [socketReady, socket]);
 
   function findMatch() {
-
-    if (status !== "idle") return;
-
+    if (!socketReady || status !== "idle") return;
     setStatus("waiting");
     socket.emit("find_match");
-
   }
 
   function sendMessage() {
-
     if (!roomId || !message.trim()) return;
-
     socket.emit("send_message", { roomId, message });
     setMessage("");
-
   }
 
   function skipChat() {
-
-    if (!roomId) return;
+    if (!roomId) {
+      reconnectToNewPartner();
+      return;
+    }
     socket.emit("skip");
-
+    reconnectToNewPartner();
   }
 
   function stopChat() {
-
-    if (roomId) {
-      socket.emit("leave_room", { roomId });
-    }
-
+    if (roomId) socket.emit("leave_room", { roomId });
     resetState();
-
   }
 
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(true);
 
   function toggleMic() {
-
     const stream = localVideoRef.current?.srcObject;
     if (!stream) return;
 
@@ -207,11 +253,9 @@ export default function VideoChat() {
     });
 
     setMicEnabled(prev => !prev);
-
   }
 
   function toggleCamera() {
-
     const stream = localVideoRef.current?.srcObject;
     if (!stream) return;
 
@@ -220,16 +264,20 @@ export default function VideoChat() {
     });
 
     setCameraEnabled(prev => !prev);
-
   }
 
   return (
-
-    <div className="app">
+    <div className="app-container">
 
       <h1 className="title">
         Video Chat {user && `— ${user.username}`}
       </h1>
+
+      {!socketReady && (
+        <div className="text-white text-center mt-10">
+          🔌 Connecting to server...
+        </div>
+      )}
 
       {mediaError ? (
         <div className="error-card">
@@ -276,7 +324,5 @@ export default function VideoChat() {
       )}
 
     </div>
-
   );
-
 }
