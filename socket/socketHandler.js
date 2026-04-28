@@ -72,6 +72,7 @@ export default function socketHandler(io) {
 
     // 🎯 MATCHMAKING (UNCHANGED LOGIC, just protected)
     socket.on("find_match", requireAuth(() => {
+      waitingQueue = waitingQueue.filter(s => s.connected && s.user);
       handleMatch(io, socket, waitingQueue);
     }));
 
@@ -105,6 +106,7 @@ export default function socketHandler(io) {
       if (socket.roomId) {
         cleanupRoom(io, socket.roomId);
       }
+      socket.roomId = null;
     }));
 
     // 🔴 SINGLE CLEAN DISCONNECT HANDLER
