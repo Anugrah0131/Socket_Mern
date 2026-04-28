@@ -40,6 +40,11 @@ export function connectSocket(user) {
     });
   });
 
+  // ✅ Global debugging
+  socket.onAny((event, ...args) => {
+    console.log(`[Socket Debug] ${event}:`, args);
+  });
+
   // ✅ handle reconnect properly
   socket.on("reconnect", () => {
     console.log("♻️ Reconnected");

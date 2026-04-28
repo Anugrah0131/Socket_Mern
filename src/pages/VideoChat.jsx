@@ -41,6 +41,26 @@ export default function VideoChat() {
 
   const reconnectTimeout = useRef(null);
 
+  // ✅ FORCE FRESH STATE ON MOUNT
+  useEffect(() => {
+    setStatus("idle");
+    setRoomId("");
+    setMessages([]);
+    setMessage("");
+    if (socket) socket.roomId = null;
+  }, []);
+
+  // ✅ HANDLE REFRESH / TAB CLOSE
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (socket && socket.roomId) {
+        socket.emit("leave_room", { roomId: socket.roomId });
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [socket]);
+
   // ✅ CONNECT SOCKET PROPERLY
   useEffect(() => {
     if (!user) {
@@ -193,6 +213,10 @@ export default function VideoChat() {
 
     initMedia();
 
+    socket.onAny((event, ...args) => {
+      console.log("📡", event, args);
+    });
+
     socket.on("match_found", handleMatchFound);
     socket.on("offer_created", handleOffer);
     socket.on("answer_created", handleAnswer);
@@ -211,12 +235,17 @@ export default function VideoChat() {
       socket.off("receive_message", handleMessage);
       socket.off("partner_left", handlePartnerLeft);
       socket.off("reset_chat", handleResetChat);
+      socket.removeAllListeners();
+
+      socket.roomId = null;
+      if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
     };
 
   }, [socketReady, socket]);
 
   function findMatch() {
     if (!socketReady || status !== "idle") return;
+    resetState();
     setStatus("waiting");
     socket.emit("find_match");
   }
@@ -273,12 +302,6 @@ export default function VideoChat() {
         Video Chat {user && `— ${user.username}`}
       </h1>
 
-      {!socketReady && (
-        <div className="text-white text-center mt-10">
-          🔌 Connecting to server...
-        </div>
-      )}
-
       {mediaError ? (
         <div className="error-card">
           <h2>⚠️ Required Media Access</h2>
@@ -294,9 +317,14 @@ export default function VideoChat() {
             cameraEnabled={cameraEnabled}
           />
 
-          {status === "idle" && (
-            <button className="main-btn" onClick={findMatch}>
-              Start Chat
+          {(status === "idle" || status === "waiting") && (
+            <button 
+              className="main-btn" 
+              onClick={status === "idle" ? findMatch : undefined}
+              disabled={!socketReady || status === "waiting"}
+              style={{ opacity: (!socketReady || status === "waiting") ? 0.7 : 1, cursor: (!socketReady || status === "waiting") ? "not-allowed" : "pointer" }}
+            >
+              {!socketReady ? "🔌 Connecting..." : status === "waiting" ? "Searching for partner..." : "Start Chat"}
             </button>
           )}
 
