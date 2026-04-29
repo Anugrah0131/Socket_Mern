@@ -1,35 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef, useContext } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { connectSocket } from "../hooks/useSocket";
 import useWebRTC from "../hooks/useWebRTC";
 import ControlBar from "../components/ControlBar";
 import VideoSection from "../components/VideoSection";
 import ChatPanel from "../components/ChatPanel";
-import { AuthContext } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 
 export default function VideoChat() {
 
-  const { user } = useContext(AuthContext);
+  const { user } = useAuth();
 
  
-  // ✅ guest creation
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
 
-    if (!user && !storedUser) {
-      console.log("👤 Creating guest user...");
-
-      const guestUser = {
-        userId: crypto.randomUUID(),
-        username: "guest_" + Math.floor(Math.random() * 10000),
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${Math.random()}`,
-        isGuest: true,
-        token: null,
-      };
-
-      localStorage.setItem("user", JSON.stringify(guestUser));
-      window.location.reload();
-    }
-  }, [user]);
 
   const [socket, setSocket] = useState(null);
   const [socketReady, setSocketReady] = useState(false);
@@ -40,6 +22,7 @@ export default function VideoChat() {
   const [messages, setMessages] = useState([]);
 
   const reconnectTimeout = useRef(null);
+  const currentRoomIdRef = useRef(null);
 
   // ✅ FORCE FRESH STATE ON MOUNT
   useEffect(() => {
@@ -47,14 +30,14 @@ export default function VideoChat() {
     setRoomId("");
     setMessages([]);
     setMessage("");
-    if (socket) socket.roomId = null;
+    currentRoomIdRef.current = null;
   }, []);
 
   // ✅ HANDLE REFRESH / TAB CLOSE
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (socket && socket.roomId) {
-        socket.emit("leave_room", { roomId: socket.roomId });
+      if (socket && currentRoomIdRef.current) {
+        socket.emit("leave_room", { roomId: currentRoomIdRef.current });
       }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -94,43 +77,10 @@ export default function VideoChat() {
 
   }, [user]);
 
-  const reconnectToNewPartner = useCallback(() => {
-
+  const resetState = useCallback(() => {
     if (!socket) return;
 
-    if (reconnectTimeout.current) {
-      clearTimeout(reconnectTimeout.current);
-    }
-
-    resetState();
-    setStatus("waiting");
-
-    reconnectTimeout.current = setTimeout(() => {
-      if (socket.roomId) return;
-      socket.emit("find_match");
-      reconnectTimeout.current = null;
-    }, 600);
-
-  }, [socket]);
-
-  const {
-    localVideoRef,
-    remoteVideoRef,
-    peerConnectionRef,
-    streamRef,
-    createPeerConnection,
-    initMedia,
-    addIceCandidate,
-    flushCandidateQueue,
-    cleanupAll,
-    mediaError
-  } = useWebRTC(socket, reconnectToNewPartner);
-
-  function resetState() {
-
-    if (!socket) return;
-
-    socket.roomId = null;
+    currentRoomIdRef.current = null;
 
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -150,11 +100,43 @@ export default function VideoChat() {
     setRoomId("");
     setMessages([]);
     setMessage("");
-  }
+  }, [socket]);
+
+  const reconnectToNewPartner = useCallback(() => {
+
+    if (!socket) return;
+
+    if (reconnectTimeout.current) {
+      clearTimeout(reconnectTimeout.current);
+    }
+
+    resetState();
+    setStatus("waiting");
+
+    reconnectTimeout.current = setTimeout(() => {
+      if (currentRoomIdRef.current) return;
+      socket.emit("find_match");
+      reconnectTimeout.current = null;
+    }, 600);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, resetState]);
+
+  const {
+    localVideoRef,
+    remoteVideoRef,
+    peerConnectionRef,
+    createPeerConnection,
+    initMedia,
+    addIceCandidate,
+    flushCandidateQueue,
+    cleanupAll,
+    mediaError
+  } = useWebRTC(socket, reconnectToNewPartner);
 
   const handleMatchFound = async ({ roomId, initiator }) => {
 
-    socket.roomId = roomId;
+    currentRoomIdRef.current = roomId;
     setRoomId(roomId);
     setStatus("chatting");
 
@@ -237,10 +219,10 @@ export default function VideoChat() {
       socket.off("reset_chat", handleResetChat);
       socket.removeAllListeners();
 
-      socket.roomId = null;
+      currentRoomIdRef.current = null;
       if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
     };
-
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socketReady, socket]);
 
   function findMatch() {
