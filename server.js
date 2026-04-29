@@ -1,17 +1,38 @@
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import dotenv from "dotenv";
+import cors from "cors";
+import mongoose from "mongoose";
 import socketHandler from "./socket/socketHandler.js";
+import authRoutes from "./routes/authRoutes.js";
+
+dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
 
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/socket_mern")
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => console.log("❌ MongoDB Connection Error:", err));
+
+// Middleware
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://socket-mern-og.onrender.com",
+];
+
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true,
+}));
+app.use(express.json());
+
 const io = new Server(httpServer, {
   cors: {
-    origin: [
-      "http://localhost:5173",
-      "https://socket-mern-og.onrender.com",
-    ],
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -21,11 +42,14 @@ app.get("/", (req, res) => {
   res.send("Socket server running 🚀");
 });
 
+// API Routes
+app.use("/api/auth", authRoutes);
+
 // Production Grade: Dynamic Endpoint for STUN/TURN delivery
 app.get("/api/ice-servers", (req, res) => {
   // Attach safe CORS headers manually mirroring our Socket config
   const origin = req.headers.origin;
-  if (["http://localhost:5173", "https://socket-mern-og.onrender.com"].includes(origin)) {
+  if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   }
 

@@ -1,59 +1,91 @@
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { v4 as uuidv4 } from "uuid";
+
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET || "default_secret", {
+    expiresIn: "7d",
+  });
+};
 
 export const register = async (req, res) => {
-  const { username, email, password } = req.body;
+  try {
+    const { username, email, password } = req.body;
 
-  const exists = await User.findOne({ email });
-  if (exists) return res.status(400).json({ msg: "Email already exists" });
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
 
-  const hashed = await bcrypt.hash(password, 10);
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
 
-  const user = await User.create({
-    username,
-    email,
-    password: hashed,
-  });
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email already in use" });
+    }
 
-  res.json({ msg: "User created" });
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const newUser = new User({
+      username,
+      email,
+      password: hashedPassword,
+    });
+
+    await newUser.save();
+
+    const token = generateToken(newUser._id);
+
+    res.status(201).json({
+      token,
+      user: {
+        userId: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        isPremium: newUser.isPremium,
+        isGuest: false,
+      },
+    });
+  } catch (error) {
+    console.error("Register Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  const user = await User.findOne({ email });
-  if (!user) return res.status(400).json({ msg: "Invalid credentials" });
+    if (!email || !password) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
 
-  const match = await bcrypt.compare(password, user.password);
-  if (!match) return res.status(400).json({ msg: "Invalid credentials" });
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
 
-  const token = jwt.sign(
-    { userId: user._id },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
 
-  res.json({
-    token,
-    user: {
-      userId: user._id,
-      username: user.username,
-      isGuest: false,
-    },
-  });
-};
+    const token = generateToken(user._id);
 
-export const guestLogin = (req, res) => {
-  const userId = uuidv4();
-
-  res.json({
-    user: {
-      userId,
-      username: "guest_" + userId.slice(0, 5),
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
-      isGuest: true,
-    },
-  });
+    res.status(200).json({
+      token,
+      user: {
+        userId: user._id,
+        username: user.username,
+        email: user.email,
+        isPremium: user.isPremium,
+        isGuest: false,
+      },
+    });
+  } catch (error) {
+    console.error("Login Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
