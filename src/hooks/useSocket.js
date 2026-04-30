@@ -34,7 +34,6 @@ export function connectSocket(user) {
     socket.emit("user:join", {
       userId: currentUser.userId,
       username: currentUser.username,
-      avatar: currentUser.avatar,
       isGuest: currentUser.isGuest,
       token: currentUser.token || null,
     });

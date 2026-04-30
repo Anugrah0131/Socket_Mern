@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
+import api from "../api/axiosConfig";
 
 export default function useWebRTC(socket, reconnectToNewPartner) {
 
@@ -10,8 +11,27 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
   const reconnectGuard = useRef(false);
 
   const [mediaError, setMediaError] = useState(null);
+  const [isMediaReady, setIsMediaReady] = useState(false);
+  const [iceServers, setIceServers] = useState([
+    { urls: "stun:stun.l.google.com:19302" } // Minimum fallback
+  ]);
 
-  function createPeerConnection() {
+  useEffect(() => {
+    const fetchIceServers = async () => {
+      try {
+        const response = await api.get("/ice-servers");
+        if (response.data && Array.isArray(response.data)) {
+          setIceServers(response.data);
+          console.log("🧊 ICE servers updated from backend");
+        }
+      } catch (err) {
+        console.error("Failed to fetch ICE servers, using fallback:", err);
+      }
+    };
+    fetchIceServers();
+  }, []);
+
+  function createPeerConnection(roomId) {
 
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -19,36 +39,20 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
 
     // 🔥 UPDATED ICE CONFIG (REAL-WORLD READY)
     peerConnectionRef.current = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-
-        // TURN (public fallback — replace in production)
-        {
-          urls: "turn:openrelay.metered.ca:80",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443?transport=tcp",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-      ],
-
+      iceServers: iceServers,
       // 🔥 OPTIONAL DEBUG MODE
       // iceTransportPolicy: "relay"
     });
 
     const pc = peerConnectionRef.current;
 
-    if (!streamRef.current) return;
+    if (!streamRef.current) {
+      console.warn("⚠️ createPeerConnection called but streamRef.current is null!");
+      return;
+    }
 
     // attach local tracks
+    console.log("🎥 Attaching local tracks to peer connection");
     streamRef.current.getTracks().forEach((track) => {
       pc.addTrack(track, streamRef.current);
     });
@@ -84,9 +88,9 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
 
     // send ICE candidates
     pc.onicecandidate = (event) => {
-      if (event.candidate && socket?.roomId) {
+      if (event.candidate && roomId) {
         socket.emit("ice_candidate", {
-          roomId: socket.roomId,
+          roomId: roomId,
           candidate: event.candidate,
         });
       }
@@ -138,6 +142,8 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
         localVideoRef.current.srcObject = stream;
       }
 
+      setIsMediaReady(true);
+      console.log("✅ Local media initialized");
       setMediaError(null);
 
     } catch (err) {
@@ -187,6 +193,7 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = null;
     }
+    setIsMediaReady(false);
   }
 
   function cleanupAll() {
@@ -221,6 +228,7 @@ export default function useWebRTC(socket, reconnectToNewPartner) {
     flushCandidateQueue,
     stopMediaTracks,
     cleanupAll,
-    mediaError
+    mediaError,
+    isMediaReady
   };
 }

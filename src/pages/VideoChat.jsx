@@ -4,11 +4,21 @@ import useWebRTC from "../hooks/useWebRTC";
 import ControlBar from "../components/ControlBar";
 import VideoSection from "../components/VideoSection";
 import ChatPanel from "../components/ChatPanel";
+import HeaderBar from "../components/HeaderBar";
+import RightPanelDrawer from "../components/RightPanelDrawer";
 import { useAuth } from "../context/AuthContext";
 
 export default function VideoChat() {
 
   const { user } = useAuth();
+
+  useEffect(() => {
+    document.title = "Glide | Live Video Chat";
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute("content", "Instantly connect with random people via video chat on Glide.");
+    }
+  }, []);
 
  
 
@@ -20,6 +30,10 @@ export default function VideoChat() {
   const [roomId, setRoomId] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const [partner, setPartner] = useState(null);
+  
+  // Drawer State
+  const [activeDrawer, setActiveDrawer] = useState(null); // null, 'chat', 'participants'
 
   const reconnectTimeout = useRef(null);
   const currentRoomIdRef = useRef(null);
@@ -30,6 +44,7 @@ export default function VideoChat() {
     setRoomId("");
     setMessages([]);
     setMessage("");
+    setPartner(null);
     currentRoomIdRef.current = null;
   }, []);
 
@@ -100,6 +115,8 @@ export default function VideoChat() {
     setRoomId("");
     setMessages([]);
     setMessage("");
+    setPartner(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   const reconnectToNewPartner = useCallback(() => {
@@ -119,7 +136,6 @@ export default function VideoChat() {
       reconnectTimeout.current = null;
     }, 600);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, resetState]);
 
   const {
@@ -131,16 +147,18 @@ export default function VideoChat() {
     addIceCandidate,
     flushCandidateQueue,
     cleanupAll,
-    mediaError
+    mediaError,
   } = useWebRTC(socket, reconnectToNewPartner);
 
-  const handleMatchFound = async ({ roomId, initiator }) => {
+  const handleMatchFound = async ({ roomId, initiator, partner }) => {
+    console.log("MATCH FOUND PARTNER:", partner);
+    setPartner(partner);
 
     currentRoomIdRef.current = roomId;
     setRoomId(roomId);
     setStatus("chatting");
 
-    createPeerConnection();
+    createPeerConnection(roomId);
 
     if (initiator && peerConnectionRef.current) {
       const offer = await peerConnectionRef.current.createOffer();
@@ -183,8 +201,30 @@ export default function VideoChat() {
     await addIceCandidate(candidate);
   };
 
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
+
   const handleMessage = (data) => {
-    setMessages((prev) => [...prev, data]);
+    setMessages((prev) => [...prev, { ...data, isSelf: data.senderId === socket.id }]);
+    
+    // Auto-emit delivered status
+    if (data.senderId !== socket.id && currentRoomIdRef.current) {
+      socket.emit("message_delivered", { roomId: currentRoomIdRef.current, msgId: data.id });
+    }
+  };
+
+  const handleStatusUpdate = ({ msgId, status }) => {
+    setMessages((prev) => prev.map(m => m.id === msgId ? { ...m, status } : m));
+  };
+
+  const handlePartnerTyping = () => {
+    setIsPartnerTyping(true);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => setIsPartnerTyping(false), 3000);
+  };
+
+  const handlePartnerStopTyping = () => {
+    setIsPartnerTyping(false);
   };
 
   const handlePartnerLeft = () => reconnectToNewPartner();
@@ -195,32 +235,30 @@ export default function VideoChat() {
 
     initMedia();
 
-    socket.onAny((event, ...args) => {
-      console.log("📡", event, args);
-    });
-
     socket.on("match_found", handleMatchFound);
     socket.on("offer_created", handleOffer);
     socket.on("answer_created", handleAnswer);
     socket.on("ice_candidate", handleIceCandidate);
     socket.on("receive_message", handleMessage);
+    socket.on("partner_typing", handlePartnerTyping);
+    socket.on("partner_stop_typing", handlePartnerStopTyping);
+    socket.on("update_message_status", handleStatusUpdate);
     socket.on("partner_left", handlePartnerLeft);
     socket.on("reset_chat", handleResetChat);
 
     return () => {
       cleanupAll();
-
       socket.off("match_found", handleMatchFound);
       socket.off("offer_created", handleOffer);
       socket.off("answer_created", handleAnswer);
       socket.off("ice_candidate", handleIceCandidate);
       socket.off("receive_message", handleMessage);
+      socket.off("partner_typing", handlePartnerTyping);
+      socket.off("partner_stop_typing", handlePartnerStopTyping);
+      socket.off("update_message_status", handleStatusUpdate);
       socket.off("partner_left", handlePartnerLeft);
       socket.off("reset_chat", handleResetChat);
       socket.removeAllListeners();
-
-      currentRoomIdRef.current = null;
-      if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socketReady, socket]);
@@ -232,10 +270,33 @@ export default function VideoChat() {
     socket.emit("find_match");
   }
 
+  const localTypingTimeoutRef = useRef(null);
+  const onTyping = () => {
+    if (!roomId) return;
+    if (!localTypingTimeoutRef.current) {
+      socket.emit("typing", { roomId });
+    }
+    if (localTypingTimeoutRef.current) clearTimeout(localTypingTimeoutRef.current);
+    localTypingTimeoutRef.current = setTimeout(() => {
+      socket.emit("stop_typing", { roomId });
+      localTypingTimeoutRef.current = null;
+    }, 2000);
+  };
+
   function sendMessage() {
     if (!roomId || !message.trim()) return;
     socket.emit("send_message", { roomId, message });
+    socket.emit("stop_typing", { roomId });
+    if (localTypingTimeoutRef.current) {
+      clearTimeout(localTypingTimeoutRef.current);
+      localTypingTimeoutRef.current = null;
+    }
     setMessage("");
+  }
+
+  function sendVoiceMessage(audioUrl) {
+    if (!roomId || !audioUrl) return;
+    socket.emit("send_message", { roomId, message: "Voice Message", type: "audio", audioUrl });
   }
 
   function skipChat() {
@@ -278,39 +339,21 @@ export default function VideoChat() {
   }
 
   return (
-    <div className="app-container">
+    <div className="immersive-layout">
+      <HeaderBar user={user} partner={partner} status={status} />
 
-      <h1 className="title">
-        Video Chat {user && `— ${user.username}`}
-      </h1>
-
-      {mediaError ? (
-        <div className="error-card">
-          <h2>⚠️ Required Media Access</h2>
-          <p>{mediaError}</p>
-        </div>
-      ) : (
-        <>
-          <VideoSection
+      <main className="immersive-main">
+        <div className={`video-area-wrapper ${activeDrawer ? "drawer-open" : ""}`}>
+          <VideoSection 
             localVideoRef={localVideoRef}
             remoteVideoRef={remoteVideoRef}
             status={status}
             user={user}
+            partner={partner}
             cameraEnabled={cameraEnabled}
           />
-
-          {(status === "idle" || status === "waiting") && (
-            <button 
-              className="main-btn" 
-              onClick={status === "idle" ? findMatch : undefined}
-              disabled={!socketReady || status === "waiting"}
-              style={{ opacity: (!socketReady || status === "waiting") ? 0.7 : 1, cursor: (!socketReady || status === "waiting") ? "not-allowed" : "pointer" }}
-            >
-              {!socketReady ? "🔌 Connecting..." : status === "waiting" ? "Searching for partner..." : "Start Chat"}
-            </button>
-          )}
-
-          <ControlBar
+          
+          <ControlBar 
             status={status}
             findMatch={findMatch}
             skipChat={skipChat}
@@ -319,20 +362,42 @@ export default function VideoChat() {
             toggleCamera={toggleCamera}
             micEnabled={micEnabled}
             cameraEnabled={cameraEnabled}
+            activeDrawer={activeDrawer}
+            toggleChat={() => setActiveDrawer(prev => prev === 'chat' ? null : 'chat')}
           />
+        </div>
 
-          {status === "chatting" && (
-            <ChatPanel
+        <RightPanelDrawer 
+          isOpen={!!activeDrawer} 
+          onClose={() => setActiveDrawer(null)}
+          title={activeDrawer === 'chat' ? "Live Chat" : "Participants"}
+        >
+          {activeDrawer === 'chat' && (
+            <ChatPanel 
               messages={messages}
               message={message}
               setMessage={setMessage}
               sendMessage={sendMessage}
-              skipChat={skipChat}
+              isPartnerTyping={isPartnerTyping}
+              partnerUsername={partner?.username || "Stranger"}
+              onTyping={onTyping}
+              sendVoiceMessage={sendVoiceMessage}
             />
           )}
-        </>
-      )}
+        </RightPanelDrawer>
+      </main>
 
+      {mediaError && (
+        <div className="error-overlay glass-dark flex-center">
+          <div className="error-card glass premium-shadow">
+            <h2>⚠️ Required Media Access</h2>
+            <p>{mediaError}</p>
+            <button onClick={() => window.location.reload()} className="action-pill start">
+              Retry Access
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

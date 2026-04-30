@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 
@@ -14,12 +14,15 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
 
 function App() {
+  const location = useLocation();
+  const isVideoChat = location.pathname === "/";
+
   return (
     <ErrorBoundary>
-      <div className="app-bg">
-        <Navbar />
+      <div className="app-bg" style={{ height: '100%' }}>
+        {!isVideoChat && <Navbar />}
 
-        <main className="main-container">
+        <main className={isVideoChat ? "immersive-container" : "main-container"}>
           <Routes>
             <Route path="/" element={<VideoChat />} />
             <Route path="/messages" element={<Messages />} />

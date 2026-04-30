@@ -1,83 +1,87 @@
-import React, { useEffect } from "react";
+import React from "react";
 
 export default function VideoSection({
   localVideoRef,
   remoteVideoRef,
   status,
-  user,
+  partner,
   cameraEnabled
 }) {
-
-  console.log("VIDEO SECTION USER:", user);
-
-  useEffect(() => {
-    if (remoteVideoRef?.current) {
-      remoteVideoRef.current.onloadedmetadata = () => {
-        remoteVideoRef.current.play().catch(() => {});
-      };
- 
-    }
-  }, [remoteVideoRef]);
-
-
   return (
-
-    <div className="video-grid">
-
-      {/* Partner video */}
-      <div className="video-card partner">
-
-        <div className="user-tag">
-          👤 Stranger
-        </div>
-
-        {status === "chatting" && (
-          <div className="status-indicator">
-            ● Connected
-          </div>
-        )}
-
+    <section className="immersive-video-container">
+      
+      {/* Remote/Partner Video Area (Main Spotlight) */}
+      <div className={`video-spotlight ${status === "chatting" ? "active" : ""}`}>
         <video
           ref={remoteVideoRef}
           autoPlay
           playsInline
+          className="remote-video-feed"
         />
 
-        {(status === "waiting" || status === "idle") && (
-          <div className="search-overlay">
-            <div className="loader"></div>
-            <p>Searching for partner...</p>
+        {/* Info Overlays */}
+        <div className="video-overlay top-left">
+          <div className="user-badge glass-dark smooth-transition">
+            <span className="badge-name">
+              {status === "chatting" 
+                ? partner?.username || "Stranger" 
+                : status === "waiting" 
+                  ? "Connecting..." 
+                  : "Ready to Glide"}
+            </span>
+          </div>
+        </div>
+
+        {status === "chatting" && (
+          <div className="video-overlay top-right">
+            <div className="live-pill glass-dark">
+              <span className="pulse-dot"></span>
+              LIVE
+            </div>
           </div>
         )}
 
+        {/* Matchmaking / Idle States */}
+        {status === "waiting" && (
+          <div className="matching-overlay flex-center flex-column">
+            <div className="premium-loader-v2">
+              <div className="loader-ring"></div>
+              <div className="loader-ring"></div>
+              <div className="loader-ring"></div>
+            </div>
+            <h2 className="matching-title">Finding your next match...</h2>
+            <p className="matching-subtitle">Sit tight, we're connecting you to someone new.</p>
+          </div>
+        )}
+
+        {status === "idle" && (
+          <div className="idle-overlay flex-center flex-column">
+            <div className="idle-visual glass-dark">
+              <div className="logo-glow">G</div>
+            </div>
+            <h1 className="idle-title">Start a Conversation</h1>
+            <p className="idle-subtitle">Click the lightning button below to connect with someone instantly.</p>
+          </div>
+        )}
       </div>
 
-      {/* Your camera (PiP) */}
-      <div className="video-card self">
-
-        <div className="user-tag">
-          👋 {user?.username || "You"}
-        </div>
-
+      {/* Local Video Area (PiP) */}
+      <div className={`local-pip glass-dark premium-shadow ${!cameraEnabled ? "muted" : ""}`}>
         <video
           ref={localVideoRef}
           autoPlay
           muted
           playsInline
-          style={{ opacity: cameraEnabled ? 1 : 0 }}
+          className="local-video-feed"
         />
-
         {!cameraEnabled && (
-          <div className="search-overlay">
-            <h1 style={{fontSize: "3rem", margin: 0}}>🚫</h1>
-            <p>Camera Off</p>
+          <div className="pip-placeholder flex-center">
+            <span className="placeholder-icon">🚫</span>
           </div>
         )}
-
+        <div className="pip-label">You</div>
       </div>
 
-    </div>
-
+    </section>
   );
-
 }

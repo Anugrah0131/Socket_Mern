@@ -10,6 +10,14 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    document.title = "Login | Glide Video Chat";
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute("content", "Sign in to Glide to connect with people around the world.");
+    }
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -26,78 +34,66 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden">
-        
-        {/* Decorative elements */}
-        <div className="absolute -top-20 -right-20 w-40 h-40 bg-indigo-600 rounded-full blur-[80px] opacity-20"></div>
-        <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-pink-600 rounded-full blur-[80px] opacity-20"></div>
+    <div className="auth-page">
+      <div className="auth-bg-blob blob-1"></div>
+      <div className="auth-bg-blob blob-2"></div>
 
-        <div className="relative z-10">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Welcome Back</h1>
-            <p className="text-zinc-400 text-sm">Sign in to connect with strangers worldwide</p>
+      <div className="auth-card">
+        <div className="auth-header">
+          <h1>Welcome Back</h1>
+          <p>Sign in to connect with strangers worldwide</p>
+        </div>
+
+        {error && <div className="auth-error">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          <div className="form-group">
+            <label>Email Address</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="auth-input"
+              placeholder="name@example.com"
+            />
+          </div>
+          
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="auth-input"
+              placeholder="••••••••"
+            />
           </div>
 
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-sm p-3 rounded-lg mb-6 text-center">
-              {error}
-            </div>
-          )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="auth-submit-btn"
+          >
+            {loading ? <div className="loading-spinner-auth"></div> : "Sign In"}
+          </button>
+        </form>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-1">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-zinc-600"
-                placeholder="you@example.com"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-1">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-zinc-600"
-                placeholder="••••••••"
-              />
-            </div>
+        <div className="guest-divider">or</div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-              ) : (
-                "Sign In"
-              )}
-            </button>
-          </form>
+        <button
+          onClick={() => navigate("/")}
+          className="auth-guest-btn"
+        >
+          Continue as Guest
+        </button>
 
-          <div className="mt-6">
-            <button
-              onClick={() => navigate("/")}
-              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-medium py-3 rounded-lg transition-colors border border-zinc-700 hover:border-zinc-600"
-            >
-              Continue as Guest
-            </button>
-          </div>
-
-          <div className="mt-8 text-center text-sm text-zinc-400">
-            Don't have an account?{" "}
-            <Link to="/register" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
-              Sign up
-            </Link>
-          </div>
+        <div className="auth-footer">
+          Don't have an account?{" "}
+          <Link to="/register" className="auth-link">
+            Create one
+          </Link>
         </div>
       </div>
     </div>

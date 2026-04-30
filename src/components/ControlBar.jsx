@@ -1,54 +1,82 @@
 import React from "react";
 
 export default function ControlBar({
+  status,
+  findMatch,
   skipChat,
   stopChat,
   toggleMic,
   toggleCamera,
   micEnabled,
-  cameraEnabled
+  cameraEnabled,
+  activeDrawer,
+  toggleChat
 }) {
-
   return (
+    <div className="floating-control-wrap flex-center">
+      <div className="floating-control-bar glass premium-shadow">
+        
+        {/* Media Controls */}
+        <div className="control-section">
+          <button
+            className={`control-circle-btn ${!micEnabled ? "muted" : ""}`}
+            onClick={toggleMic}
+            title={micEnabled ? "Mute Microphone" : "Unmute Microphone"}
+          >
+            {micEnabled ? "🎤" : "🔇"}
+          </button>
 
-    <div className="control-bar">
+          <button
+            className={`control-circle-btn ${!cameraEnabled ? "muted" : ""}`}
+            onClick={toggleCamera}
+            title={cameraEnabled ? "Stop Camera" : "Start Camera"}
+          >
+            {cameraEnabled ? "📷" : "🚫"}
+          </button>
+        </div>
 
-      <button
-        className={`control-btn ${!micEnabled ? "off" : ""}`}
-        onClick={toggleMic}
-      >
-        {micEnabled ? "🎤" : "🔇"}
-        <span>{micEnabled ? "Mute" : "Unmute"}</span>
-      </button>
+        <div className="control-divider"></div>
 
-      <button
-        className={`control-btn ${!cameraEnabled ? "off" : ""}`}
-        onClick={toggleCamera}
-      >
-        {cameraEnabled ? "📷" : "🚫"}
-        <span>{cameraEnabled ? "Camera Off" : "Camera On"}</span>
-      </button>
+        {/* Action Controls */}
+        <div className="control-section">
+          {status === "chatting" ? (
+            <>
+              <button className="premium-btn skip-btn" onClick={skipChat}>
+                <span className="btn-icon">⏭️</span>
+                <span className="btn-label">Next</span>
+              </button>
+              
+              <button className="premium-btn stop-btn" onClick={stopChat}>
+                <span className="btn-icon">⏹️</span>
+                <span className="btn-label">Stop</span>
+              </button>
+            </>
+          ) : (
+            <button 
+              className="premium-btn start-btn" 
+              onClick={findMatch}
+              disabled={status === "waiting"}
+            >
+              <span className="btn-icon">⚡</span>
+              <span className="btn-label">{status === "waiting" ? "Searching..." : "Start Matching"}</span>
+            </button>
+          )}
+        </div>
 
-      <button
-        className="control-btn skip-btn"
-        onClick={skipChat}
-        style={{ background: "#6366f1", borderColor: "#4f46e5", padding: "14px 28px" }}
-      >
-        ⏭️
-        <span>Next</span>
-      </button>
+        <div className="control-divider"></div>
 
-      <button
-        className="control-btn stop-btn"
-        onClick={stopChat}
-        style={{ background: "#ef4444", borderColor: "#dc2626", padding: "14px 28px" }}
-      >
-        ⏹️
-        <span>Stop</span>
-      </button>
+        {/* Interaction Controls */}
+        <div className="control-section">
+          <button 
+            className={`control-circle-btn chat-toggle-btn ${activeDrawer === 'chat' ? "active" : ""}`}
+            onClick={toggleChat}
+            title="Toggle Chat"
+          >
+            💬
+          </button>
+        </div>
 
+      </div>
     </div>
-
   );
-
 }

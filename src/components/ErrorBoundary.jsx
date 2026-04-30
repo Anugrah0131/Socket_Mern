@@ -18,20 +18,18 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="app-bg" style={{ display: 'flex', textAlign: 'center' }}>
-          <div className="app-card" style={{ border: '1px solid #ef4444' }}>
-            <h1 style={{ fontSize: '4rem' }}>⚠️</h1>
-            <h2 className="logo">Connection Interrupted</h2>
-            <p style={{ opacity: 0.7, margin: '20px 0' }}>
-              Something went wrong with the video feed.
-            </p>
-            <button 
-              className="btn-skip" 
-              onClick={() => window.location.reload()}
-            >
-              RELOAD GLIDE
-            </button>
-          </div>
+        <div className="app-bg flex-center" style={{ height: '100vh', flexDirection: 'column', gap: '24px', textAlign: 'center', padding: '40px' }}>
+          <div style={{ fontSize: '64px' }}>⚠️</div>
+          <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#f9fafb', margin: 0 }}>Connection Interrupted</h2>
+          <p style={{ color: '#9ca3af', maxWidth: '400px', lineHeight: 1.6, margin: 0 }}>
+            Something went wrong. Please reload to reconnect.
+          </p>
+          <button
+            className="action-pill start"
+            onClick={() => window.location.reload()}
+          >
+            Reload Glide
+          </button>
         </div>
       );
     }

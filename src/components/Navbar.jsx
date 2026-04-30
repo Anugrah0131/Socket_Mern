@@ -1,78 +1,85 @@
-import React, { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Navbar() {
-
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const handleLogout = () => {
+    logout();
+    setMenuOpen(false);
+    navigate("/login");
+  };
 
   return (
+    <nav className={`navbar-v2 glass smooth-transition ${scrolled ? "scrolled" : ""}`}>
+      <div className="nav-container">
+        <Link to="/" className="nav-brand" onClick={() => setMenuOpen(false)}>
+          <div className="logo-icon">G</div>
+          <span className="logo-text">GLIDE</span>
+        </Link>
 
-    <nav className="navbar">
+        <div className={`nav-menu ${menuOpen ? "open" : ""}`}>
+          <Link 
+            to="/" 
+            className={`nav-item ${location.pathname === "/" ? "active" : ""}`}
+            onClick={() => setMenuOpen(false)}
+          >
+            Video Chat
+          </Link>
+          <Link 
+            to="/messages" 
+            className={`nav-item ${location.pathname === "/messages" ? "active" : ""}`}
+            onClick={() => setMenuOpen(false)}
+          >
+            Messages
+          </Link>
+          <Link 
+            to="/profile" 
+            className={`nav-item ${location.pathname === "/profile" ? "active" : ""}`}
+            onClick={() => setMenuOpen(false)}
+          >
+            Profile
+          </Link>
+        </div>
 
-      {/* Logo */}
-      <div className="logo">
-        GLIDE
-      </div>
-
-      {/* Desktop Links */}
-      <div className={`nav-links ${menuOpen ? "active" : ""}`}>
-
-        <NavLink to="/" onClick={() => setMenuOpen(false)}>
-          New Chat
-        </NavLink>
-
-        <NavLink to="/messages" onClick={() => setMenuOpen(false)}>
-          Messages
-          <span className="badge">3</span>
-        </NavLink>
-
-        <NavLink to="/profile" onClick={() => setMenuOpen(false)}>
-          Profile
-        </NavLink>
-
-      </div>
-
-      {/* Right Side */}
-      <div className="nav-right">
-
-        {/* Profile */}
-        <div
-          className="profile"
-          onClick={() => setProfileOpen(!profileOpen)}
-        >
-          <img
-            src="https://i.pravatar.cc/40"
-            alt="profile"
-          />
-
-          {profileOpen && (
-
-            <div className="profile-dropdown">
-
-              <Link to="/profile">My Profile</Link>
-              <Link to="/messages">Messages</Link>
-              <div className="divider"></div>
-              <button>Logout</button>
-
+        <div className="nav-actions">
+          {user ? (
+            <div className="nav-profile-group">
+              <Link to="/profile" className="nav-user-pill glass" onClick={() => setMenuOpen(false)}>
+                <img src={user.avatar} alt="avatar" className="nav-avatar" />
+                <span className="nav-username">{user.username}</span>
+              </Link>
+              <button className="nav-logout-btn" onClick={handleLogout} title="Logout">
+                🚪
+              </button>
             </div>
-
+          ) : (
+            <div className="nav-auth-btns">
+              <Link to="/login" className="nav-login-link" onClick={() => setMenuOpen(false)}>Login</Link>
+              <Link to="/register" className="nav-register-btn" onClick={() => setMenuOpen(false)}>Join Now</Link>
+            </div>
           )}
 
+          <button className={`menu-toggle ${menuOpen ? "open" : ""}`} onClick={() => setMenuOpen(!menuOpen)}>
+            <span></span><span></span><span></span>
+          </button>
         </div>
-
-        {/* Mobile Menu Button */}
-        <div
-          className="menu-toggle"
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          ☰
-        </div>
-
       </div>
-
+      
+      {menuOpen && <div className="nav-overlay" onClick={() => setMenuOpen(false)}></div>}
     </nav>
-
   );
-
 }
