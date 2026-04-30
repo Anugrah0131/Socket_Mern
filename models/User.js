@@ -1,13 +1,13 @@
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
-    username : String,
-    email : { type: String, required: true, unique: true },
-    password : String,
-    isPremium: { type: Boolean, default: false },
-},{ timestamps: true });
+  username: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  isPremium: { type: Boolean, default: false },
+}, { timestamps: true });
 
-export default mongoose.model("user", userSchema);
+export default mongoose.model("User", userSchema);
     
   
 

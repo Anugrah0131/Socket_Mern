@@ -48,11 +48,19 @@ export default function handleMatch(io, socket, waitingQueue) {
     io.to(user1.id).emit("match_found", {
       roomId,
       initiator: true,
+      partner: {
+        username: user2.user?.username || "Stranger",
+        avatar: user2.user?.avatar,
+      },
     });
 
     io.to(user2.id).emit("match_found", {
       roomId,
       initiator: false,
+      partner: {
+        username: user1.user?.username || "Stranger",
+        avatar: user1.user?.avatar,
+      },
     });
   }
 }

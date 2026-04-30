@@ -15,10 +15,10 @@ export default function socketHandler(io) {
 
     console.log("🟢 New socket connected:", socket.id);
 
-    // ✅ AUTH LAYER (CRITICAL)
+    // ✅ AUTH LAYER (PRODUCTION READY)
     socket.on("user:join", (data) => {
       try {
-        const { token, userId, username, avatar, isGuest } = data;
+        const { token, userId, username, isGuest } = data;
 
         let userData = null;
 
@@ -26,35 +26,33 @@ export default function socketHandler(io) {
           const decoded = verifyToken(token);
 
           if (!decoded) {
-            console.log("❌ Invalid token");
+            console.log("❌ Invalid token - disconnecting");
             return socket.disconnect();
           }
 
           userData = {
             userId: decoded.userId,
-            username,
-            avatar,
+            username: username || "Authenticated User",
             isGuest: false,
           };
 
         } else {
+          // Guest User
           userData = {
-            userId,
-            username,
-            avatar,
+            userId: userId || `guest_${socket.id}`,
+            username: username || "Guest",
             isGuest: true,
           };
         }
 
         socket.user = userData;
+        console.log("✅ User authenticated:", socket.user);
 
-        console.log("✅ User joined:", socket.user);
-
-        // send profile AFTER auth
+        // Notify client of successful join
         socket.emit("user_profile", socket.user);
 
       } catch (err) {
-        console.error("Auth error:", err);
+        console.error("Auth error in socket:", err);
         socket.disconnect();
       }
     });
@@ -90,6 +88,23 @@ export default function socketHandler(io) {
 
     socket.on("send_message", requireAuth((data) => {
       handleMessage(io, socket, data);
+    }));
+
+    // --- CHAT EXTENSIONS (Typing & Status) ---
+    socket.on("typing", requireAuth(({ roomId }) => {
+      socket.to(roomId).emit("partner_typing", { username: socket.user?.username || "Stranger" });
+    }));
+
+    socket.on("stop_typing", requireAuth(({ roomId }) => {
+      socket.to(roomId).emit("partner_stop_typing");
+    }));
+
+    socket.on("message_delivered", requireAuth(({ roomId, msgId }) => {
+      socket.to(roomId).emit("update_message_status", { msgId, status: "delivered" });
+    }));
+
+    socket.on("message_seen", requireAuth(({ roomId, msgId }) => {
+      socket.to(roomId).emit("update_message_status", { msgId, status: "seen" });
     }));
 
     socket.on("skip", requireAuth(() => {

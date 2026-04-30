@@ -1,6 +1,8 @@
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { v4 as uuidv4 } from "uuid";
+import { generateUsername } from "../utils/generateUsername.js";
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || "default_secret", {
@@ -43,13 +45,30 @@ export const register = async (req, res) => {
       user: {
         userId: newUser._id,
         username: newUser.username,
-        email: newUser.email,
-        isPremium: newUser.isPremium,
         isGuest: false,
       },
     });
   } catch (error) {
     console.error("Register Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getGuestProfile = async (req, res) => {
+  try {
+    const userId = uuidv4();
+    const username = generateUsername();
+
+    res.status(200).json({
+      user: {
+        userId,
+        username,
+        isGuest: true,
+      },
+      token: null,
+    });
+  } catch (error) {
+    console.error("Guest Profile Error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -79,8 +98,6 @@ export const login = async (req, res) => {
       user: {
         userId: user._id,
         username: user.username,
-        email: user.email,
-        isPremium: user.isPremium,
         isGuest: false,
       },
     });

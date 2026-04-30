@@ -1,7 +1,17 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
-export const verifyToken = async (req, res, next) => {
+// Standalone function for socket and other use cases
+export const verifyToken = (token) => {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET || "default_secret");
+  } catch (error) {
+    return null;
+  }
+};
+
+// Express Middleware
+export const protect = async (req, res, next) => {
   try {
     let token;
 
@@ -16,7 +26,10 @@ export const verifyToken = async (req, res, next) => {
       return res.status(401).json({ message: "Not authorized, no token" });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "default_secret");
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      return res.status(401).json({ message: "Not authorized, token failed" });
+    }
 
     req.user = await User.findById(decoded.userId).select("-password");
 
