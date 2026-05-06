@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -9,6 +9,16 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      navigate("/video");
+    }
+  }, [user]);
+
+
 
   React.useEffect(() => {
     document.title = "Login | Glide Video Chat";
@@ -25,7 +35,7 @@ const Login = () => {
 
     try {
       await login(email, password);
-      navigate("/");
+      navigate("/video");
     } catch (err) {
       setError(err.response?.data?.message || "Failed to login. Please try again.");
     } finally {
@@ -83,7 +93,7 @@ const Login = () => {
         <div className="guest-divider">or</div>
 
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/video")}
           className="auth-guest-btn"
         >
           Continue as Guest

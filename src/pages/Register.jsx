@@ -26,7 +26,7 @@ const Register = () => {
 
     try {
       await register(username, email, password);
-      navigate("/");
+      navigate("/video");
     } catch (err) {
       setError(err.response?.data?.message || "Failed to register. Please try again.");
     } finally {
