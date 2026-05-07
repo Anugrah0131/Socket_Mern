@@ -7,18 +7,16 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const [guestLoading, setGuestLoading] = useState(false);
+  
+  const { login, loginAsGuest, user } = useAuth();
   const navigate = useNavigate();
-
-  const { user } = useAuth();
 
   useEffect(() => {
     if (user) {
       navigate("/video");
     }
-  }, [user]);
-
-
+  }, [user, navigate]);
 
   React.useEffect(() => {
     document.title = "Login | Glide Video Chat";
@@ -40,6 +38,19 @@ const Login = () => {
       setError(err.response?.data?.message || "Failed to login. Please try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setError("");
+    setGuestLoading(true);
+    try {
+      await loginAsGuest();
+      navigate("/video");
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to login as guest.");
+    } finally {
+      setGuestLoading(false);
     }
   };
 
@@ -83,7 +94,7 @@ const Login = () => {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || guestLoading}
             className="auth-submit-btn"
           >
             {loading ? <div className="loading-spinner-auth"></div> : "Sign In"}
@@ -93,10 +104,12 @@ const Login = () => {
         <div className="guest-divider">or</div>
 
         <button
-          onClick={() => navigate("/video")}
+          onClick={handleGuestLogin}
+          disabled={loading || guestLoading}
           className="auth-guest-btn"
+          type="button"
         >
-          Continue as Guest
+          {guestLoading ? <div className="loading-spinner-auth" style={{ borderColor: 'var(--primary)', borderTopColor: 'transparent' }}></div> : "Continue as Guest"}
         </button>
 
         <div className="auth-footer">

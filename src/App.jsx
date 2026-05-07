@@ -25,12 +25,26 @@ function App() {
         <main className={isVideoChat ? "immersive-container" : "main-container"}>
           <Routes>
 
-            <Route path="/messages" element={<Messages />} />
-            <Route path="/profile" element={<Profile />} />
+            <Route 
+              path="/messages" 
+              element={
+                <ProtectedRoute>
+                  <Messages />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } 
+            />
 
             <Route path="/register" element={<Register />} />
 
-            <Route path="/" element={<Navigate to="/login" />} />
+            <Route path="/" element={<Navigate to="/video" />} />
 
             <Route path="/login" element={<Login />} />
 
